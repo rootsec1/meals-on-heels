@@ -11,17 +11,18 @@ import {
 } from "@nextui-org/react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SnackbarProvider, enqueueSnackbar } from "notistack";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AiOutlineSearch } from "react-icons/ai";
 import { FaLocationDot } from "react-icons/fa6";
 import Map, {
   GeolocateControl,
+  MapRef,
   Marker,
   NavigationControl,
   Popup,
 } from "react-map-gl";
 
-// Local
+// Local imports
 import {
   DEFAULT_SEARCH_RADIUS,
   LOCATION_CENTER_PALO_ALTO,
@@ -39,7 +40,12 @@ interface PopupInfo {
   distance: number;
 }
 
+/**
+ * Main component for the search page.
+ * Allows users to search for nearby food trucks based on their location.
+ */
 export default function SearchPage() {
+  const mapRef = useRef<MapRef | null>(null);
   const [searchLatitude, setSearchLatitude] = useState<number | null>(null);
   const [searchLongitude, setSearchLongitude] = useState<number | null>(null);
   const [searchRadius, setSearchRadius] = useState<number>(
@@ -50,6 +56,11 @@ export default function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null);
 
+  /**
+   * Displays a notification to the user.
+   * @param message - The message to display.
+   * @param isError - Whether the message is an error message.
+   */
   function alertUser(message: string, isError: boolean) {
     enqueueSnackbar(message, {
       variant: isError ? "error" : "success",
@@ -62,6 +73,9 @@ export default function SearchPage() {
     });
   }
 
+  /**
+   * Fetches nearby food trucks based on the search coordinates and radius.
+   */
   const getNearbyFoodTrucks = useCallback(async () => {
     // Validate search latitude and longitude
     if (!searchLatitude || !searchLongitude) {
@@ -108,6 +122,10 @@ export default function SearchPage() {
     }
   }, [searchLatitude, searchLongitude]);
 
+  /**
+   * Component for the left section of the page.
+   * Contains input fields for latitude, longitude, and search radius.
+   */
   function LeftSection() {
     return (
       <div className="text-xs">
@@ -223,7 +241,7 @@ export default function SearchPage() {
           Find food trucks nearby
         </Button>
 
-        {/*List of food trucks retrieved from API */}
+        {/* List of food trucks retrieved from API */}
         {foodTruckList.length > 0 && (
           <div className="mt-4 h-[400px] overflow-hidden">
             <h2 className="text-lg font-bold mb-2">Food Trucks Nearby</h2>
@@ -237,6 +255,13 @@ export default function SearchPage() {
                       isHoverable
                       isPressable
                       onPress={() => {
+                        mapRef.current?.flyTo({
+                          center: [
+                            foodTruck["longitude"],
+                            foodTruck["latitude"],
+                          ],
+                          zoom: 14,
+                        });
                         setPopupInfo({
                           latitude: foodTruck["latitude"],
                           longitude: foodTruck["longitude"],
@@ -264,7 +289,6 @@ export default function SearchPage() {
                       <Divider />
                       {(foodTruck["address"] || foodTruck["distance"]) && (
                         <CardFooter className="flex justify-between">
-                          {/*Space around*/}
                           <p className="text-xs text-gray-500">
                             {foodTruck["address"]}
                           </p>
@@ -301,6 +325,7 @@ export default function SearchPage() {
       <div className="w-2/3">
         {searchLatitude && searchLongitude ? (
           <Map
+            ref={mapRef}
             mapboxAccessToken={MAPBOX_API_KEY}
             initialViewState={{
               latitude: searchLatitude,
