@@ -4,6 +4,16 @@ Meals on Heels is a simple yet powerful application that helps you find nearby f
 
 ![Meals on Heels](https://github.com/user-attachments/assets/9afa7eaa-7848-4520-add4-7de502c6b431)
 
+---
+
+## Demo (click to watch on YouTube)
+
+[![Watch Demo here](https://img.youtube.com/vi/U05Zj20NZts/0.jpg)](https://youtu.be/U05Zj20NZts)
+
+Link: https://youtu.be/U05Zj20NZts
+
+---
+
 ## Features
 
 - Perform geolocation-based searches for food trucks.
