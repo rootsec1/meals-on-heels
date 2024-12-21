@@ -1,101 +1,400 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+import {
+  Button,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  CircularProgress,
+  Divider,
+} from "@nextui-org/react";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { SnackbarProvider, enqueueSnackbar } from "notistack";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AiOutlineSearch } from "react-icons/ai";
+import { FaLocationDot } from "react-icons/fa6";
+import Map, {
+  GeolocateControl,
+  MapRef,
+  Marker,
+  NavigationControl,
+  Popup,
+} from "react-map-gl";
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+// Local imports
+import {
+  DEFAULT_SEARCH_RADIUS,
+  LOCATION_CENTER_PALO_ALTO,
+  MAPBOX_API_KEY,
+} from "@/app/constants";
+import { fetchNearbyFoodTrucks } from "@/app/services";
+import { Input } from "@nextui-org/react";
+
+interface PopupInfo {
+  latitude: number;
+  longitude: number;
+  title: string;
+  description: string;
+  address: string;
+  distance: number;
+}
+
+/**
+ * Main component for the search page.
+ * Allows users to search for nearby food trucks based on their location.
+ */
+export default function SearchPage() {
+  const mapRef = useRef<MapRef | null>(null);
+  const [searchLatitude, setSearchLatitude] = useState<number | null>(null);
+  const [searchLongitude, setSearchLongitude] = useState<number | null>(null);
+  const [searchRadius, setSearchRadius] = useState<number>(
+    DEFAULT_SEARCH_RADIUS
+  );
+
+  const [foodTruckList, setFoodTruckList] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null);
+
+  /**
+   * Displays a notification to the user.
+   * @param message - The message to display.
+   * @param isError - Whether the message is an error message.
+   */
+  function alertUser(message: string, isError: boolean) {
+    enqueueSnackbar(message, {
+      variant: isError ? "error" : "success",
+      preventDuplicate: true,
+      anchorOrigin: {
+        vertical: "bottom",
+        horizontal: "right",
+      },
+      autoHideDuration: 3000,
+    });
+  }
+
+  /**
+   * Fetches nearby food trucks based on the search coordinates and radius.
+   */
+  const getNearbyFoodTrucks = useCallback(async () => {
+    // Validate search latitude and longitude
+    if (!searchLatitude || !searchLongitude) {
+      alertUser("Please enter a valid latitude and longitude", true);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const foodTruckList = await fetchNearbyFoodTrucks(
+        searchLatitude,
+        searchLongitude,
+        searchRadius
+      );
+      if ((foodTruckList as unknown as unknown[]).length === 0) {
+        alertUser("No food trucks found nearby :(", true);
+      }
+      setFoodTruckList(foodTruckList ?? []);
+    } catch (error) {
+      console.error("Error fetching nearby food trucks:", error);
+      alertUser("Error fetching nearby food trucks", true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchLatitude, searchLongitude, searchRadius]);
+
+  useEffect(() => {
+    // Set initial geolocation only once if not already set
+    if (searchLatitude === null && searchLongitude === null) {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setSearchLatitude(position.coords.latitude);
+            setSearchLongitude(position.coords.longitude);
+          },
+          (error) => {
+            console.error("Error getting geolocation:", error);
+            setSearchLongitude(LOCATION_CENTER_PALO_ALTO.longitude);
+          }
+        );
+      } else {
+        console.error("Geolocation is not supported by this browser.");
+      }
+    }
+  }, [searchLatitude, searchLongitude]);
+
+  /**
+   * Component for the left section of the page.
+   * Contains input fields for latitude, longitude, and search radius.
+   */
+  function LeftSection() {
+    return (
+      <div className="text-xs">
+        {/* Input for coordinates */}
+        <div className="mt-4 flex gap-4">
+          {/* Input for Latitude */}
+          <div className="flex-1">
+            <Input
+              isClearable
+              classNames={{
+                label: "text-black/50",
+                input: [
+                  "bg-transparent",
+                  "text-black/90",
+                  "placeholder:text-default-700/50",
+                ],
+                innerWrapper: "bg-transparent",
+                inputWrapper: [
+                  "shadow-xl",
+                  "bg-white",
+                  "backdrop-blur-xl",
+                  "hover:bg-default-200/70",
+                  "!cursor-text",
+                ],
+              }}
+              label="Latitude"
+              placeholder="Ex: 37.76"
+              radius="lg"
+              startContent={
+                <AiOutlineSearch className="text-black/50 mb-0.5 dark:text-white/90 text-slate-400 pointer-events-none flex-shrink-0" />
+              }
+              value={searchLatitude?.toString() || ""}
+              onValueChange={(value) => {
+                setSearchLatitude(value ? Number(value.trim()) : null);
+              }}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </div>
+
+          {/* Input for Longitude */}
+          <div className="flex-1">
+            <Input
+              isClearable
+              classNames={{
+                label: "text-black/50",
+                input: [
+                  "bg-transparent",
+                  "text-black/90",
+                  "placeholder:text-default-700/50",
+                ],
+                innerWrapper: "bg-transparent",
+                inputWrapper: [
+                  "shadow-xl",
+                  "bg-white",
+                  "backdrop-blur-xl",
+                  "hover:bg-default-200/70",
+                  "!cursor-text",
+                ],
+              }}
+              label="Longitude"
+              placeholder="Ex: -122.41"
+              radius="lg"
+              startContent={
+                <AiOutlineSearch className="text-black/50 mb-0.5 dark:text-white/90 text-slate-400 pointer-events-none flex-shrink-0" />
+              }
+              value={searchLongitude?.toString() || ""}
+              onValueChange={(value) => {
+                setSearchLongitude(value ? Number(value.trim()) : null);
+              }}
+            />
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* Input for search radius */}
+        <div className="mt-4">
+          <Input
+            isClearable
+            type="number"
+            classNames={{
+              label: "text-black/50",
+              input: [
+                "bg-transparent",
+                "text-black/90",
+                "placeholder:text-default-700/50",
+              ],
+              innerWrapper: "bg-transparent",
+              inputWrapper: [
+                "shadow-xl",
+                "bg-white",
+                "backdrop-blur-xl",
+                "hover:bg-default-200/70",
+                "!cursor-text",
+              ],
+            }}
+            min={0.1}
+            label="Radius (km)"
+            placeholder="Ex: 5"
+            radius="sm"
+            value={searchRadius.toString()}
+            onValueChange={(value) => setSearchRadius(Number(value))}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+        </div>
+
+        {/* Button */}
+        <Button
+          className="w-full mt-8"
+          color="secondary"
+          variant="shadow"
+          startContent={<AiOutlineSearch size={18} />}
+          isDisabled={isLoading}
+          isLoading={isLoading}
+          onPress={getNearbyFoodTrucks}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          Find food trucks nearby
+        </Button>
+
+        {/* List of food trucks retrieved from API */}
+        {foodTruckList.length > 0 && (
+          <div className="mt-4 h-[400px] overflow-hidden">
+            <h2 className="text-lg font-bold mb-2">Food Trucks Nearby</h2>
+            <div className="overflow-y-auto h-full">
+              {foodTruckList.length > 0 ? (
+                <div className="space-y-4">
+                  {foodTruckList.map((foodTruck) => (
+                    <Card
+                      key={foodTruck["location_id"]}
+                      className="shadow-sm hover:shadow-lg hover:cursor-pointer w-full"
+                      isHoverable
+                      isPressable
+                      onPress={() => {
+                        mapRef.current?.flyTo({
+                          center: [
+                            foodTruck["longitude"],
+                            foodTruck["latitude"],
+                          ],
+                          zoom: 14,
+                        });
+                        setPopupInfo({
+                          latitude: foodTruck["latitude"],
+                          longitude: foodTruck["longitude"],
+                          title: foodTruck["applicant"],
+                          description: foodTruck["food_items"],
+                          address: foodTruck["address"],
+                          distance: foodTruck["distance"],
+                        });
+                      }}
+                      onMouseLeave={() => setPopupInfo(null)}
+                    >
+                      {foodTruck["applicant"] && (
+                        <CardHeader>
+                          <h3 className="font-bold">
+                            {foodTruck["applicant"]}
+                          </h3>
+                        </CardHeader>
+                      )}
+                      <Divider />
+                      {foodTruck["food_items"] && (
+                        <CardBody>
+                          <p className="text-xs">{foodTruck["food_items"]}</p>
+                        </CardBody>
+                      )}
+                      <Divider />
+                      {(foodTruck["address"] || foodTruck["distance"]) && (
+                        <CardFooter className="flex justify-between">
+                          <p className="text-xs text-gray-500">
+                            {foodTruck["address"]}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {Number(foodTruck["distance"]).toFixed(2)} km away
+                          </p>
+                        </CardFooter>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 p-4">No food trucks found nearby</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen">
+      <SnackbarProvider />
+
+      {/* Left section taking 1/3 of the width */}
+      <div className="w-1/3 bg-gray-100 p-4">
+        <h1 className="text-xl font-bold">meals ● on ● heels</h1>
+        {/* Additional content can go here */}
+        <LeftSection />
+      </div>
+
+      {/* Right section taking 2/3 of the width */}
+      <div className="w-2/3">
+        {searchLatitude && searchLongitude ? (
+          <Map
+            ref={mapRef}
+            mapboxAccessToken={MAPBOX_API_KEY}
+            initialViewState={{
+              latitude: searchLatitude,
+              longitude: searchLongitude,
+              zoom: 13,
+            }}
+            style={{ width: "100%", height: "100%" }}
+            mapStyle="mapbox://styles/mapbox/streets-v12"
+          >
+            {searchLatitude && searchLongitude && (
+              <Marker
+                latitude={searchLatitude}
+                longitude={searchLongitude}
+                anchor="bottom"
+              >
+                <FaLocationDot color="#03A9F4" size={32} />
+              </Marker>
+            )}
+            {foodTruckList.map((foodTruck) => (
+              <Marker
+                key={foodTruck["location_id"]}
+                latitude={foodTruck["latitude"]}
+                longitude={foodTruck["longitude"]}
+                anchor="bottom"
+              >
+                <FaLocationDot
+                  color="#FF5722"
+                  size={20}
+                  onMouseEnter={() =>
+                    setPopupInfo({
+                      latitude: foodTruck["latitude"],
+                      longitude: foodTruck["longitude"],
+                      title: foodTruck["applicant"],
+                      description: foodTruck["food_items"],
+                      address: foodTruck["address"],
+                      distance: foodTruck["distance"],
+                    })
+                  }
+                  className="hover:cursor-pointer"
+                />
+              </Marker>
+            ))}
+
+            {popupInfo && (
+              <Popup
+                latitude={popupInfo.latitude}
+                longitude={popupInfo.longitude}
+                closeButton
+              >
+                <div className="p-1 text-xs">
+                  <h3 className="font-bold">{popupInfo.title}</h3>
+                  <p className="text-gray-500 mb-1">{popupInfo.address}</p>
+                  <p>{popupInfo.description}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {popupInfo.distance.toFixed(2)} km away
+                  </p>
+                </div>
+              </Popup>
+            )}
+
+            <GeolocateControl />
+            <NavigationControl />
+          </Map>
+        ) : (
+          <div className="h-screen flex items-center justify-center">
+            <CircularProgress aria-label="Loading..." color="secondary" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
